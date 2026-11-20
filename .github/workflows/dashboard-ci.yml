@@ -1,0 +1,37 @@
+# Dashboard checks that need no credentials: the PII guard over every tracked file, the Python unit tests for the
+# dashboard files, and the app's tofu fmt/validate and node tests. It runs the root `mise run check` task, so a dev
+# box, an agent sandbox and CI run the same thing. Separate from ci.yml, which belongs to the upstream template.
+name: Dashboard CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Check (PII guard, unit tests, tofu, node)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}:${{ github.workspace }}/app
+      PII_DENYLIST: ${{ secrets.PII_DENYLIST }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        with:
+          # renovate: datasource=github-releases depName=jdx/mise extractVersion=^v(?<version>.+)$
+          version: 2026.11.10
+          cache: true
+          persist_github_token: false
+      - run: mise run check

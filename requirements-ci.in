@@ -1,0 +1,5 @@
+# Direct Python packages CI installs. Edit this file, not requirements-ci.txt:
+# the .txt is compiled from it with hashes (command in its header) and
+# Renovate recompiles it on every update.
+openpyxl==3.1.5
+pyyaml==6.0.3

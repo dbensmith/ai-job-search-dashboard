@@ -1,0 +1,4 @@
+# uv, which CI uses to install Python and the packages in requirements-ci.txt.
+# Edit this file, not requirements-uv.txt: the .txt is compiled from it with
+# hashes (command in its header) and Renovate recompiles it on every update.
+uv==0.13.9

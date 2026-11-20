@@ -1,0 +1,7 @@
+# Regexes matched against a finding's value; a match suppresses it. Tracked: never put personal data here.
+# These are fictional values in upstream's own docs and tests (phishing look-alikes, example street, system path).
+^greenhouse\.io@evil\.com$
+^boards\.greenhouse\.io@evil-domain\.com$
+^hr@careers-example\.net$
+^123 Hiring Street$
+^/home/linuxbrew

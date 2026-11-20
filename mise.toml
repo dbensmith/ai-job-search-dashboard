@@ -1,0 +1,52 @@
+# Repo-root tasks for agent sessions and dev boxes. Tool pins and the dashboard tasks live in app/mise.toml
+# (Node, OpenTofu, op; checksums in app/mise.lock); Python comes from uv with hashed requirements, as in CI.
+#   bash scripts/session-setup.sh     installs mise (version from the CI workflow, checksummed) if missing, then runs session:setup
+#   mise run check                    everything CI checks without credentials
+#   mise run session:teardown         local dev only: removes what setup created in the clone
+[tasks."session:setup"]
+description = "Prepare a fresh session: Python env (hash-pinned, same as CI) and the dashboard's tools and packages. Idempotent"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+stamp=".session/py.stamp"
+want="$(cat .python-version)|$(cat requirements-ci.txt requirements-uv.txt | sha256sum | cut -d' ' -f1)"
+if [ ! -x .session/py/bin/python ] || [ "$(cat "$stamp" 2>/dev/null)" != "$want" ]; then
+  mkdir -p .session
+  [ -x .session/uv/bin/uv ] || python3 -m venv .session/uv
+  .session/uv/bin/pip install --quiet --disable-pip-version-check --require-hashes -r requirements-uv.txt
+  export UV_PYTHON_INSTALL_DIR="$PWD/.session/python"
+  .session/uv/bin/uv python install --quiet "$(cat .python-version)"
+  .session/uv/bin/uv venv --quiet --allow-existing --python "$(cat .python-version)" .session/py
+  .session/uv/bin/uv pip install --quiet --python .session/py --require-hashes -r requirements-ci.txt
+  echo "$want" > "$stamp"
+fi
+cd app && mise install --quiet && mise run install
+'''
+
+[tasks."session:teardown"]
+description = "Local dev: remove what session:setup and the checks created in this clone (venv, provider caches, site, bundle, pycache). Leaves app/.env*, tokens, OpenTofu state and caches alone"
+run = '''
+rm -rf .session site app/infra/.terraform app/infra/bootstrap/.terraform app/dist /tmp/dashboard-report.md
+find . -name __pycache__ -type d -not -path './app/node_modules/*' -prune -exec rm -rf {} + 2>/dev/null || true
+echo "session:teardown done"
+'''
+
+[tasks."test:dashboard"]
+description = "Python unit tests for the dashboard files (PII guard, tracker CSV tools, build_report). Fails when none of them exist"
+depends = ["session:setup"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+mods=$(ls tests/test_pii_guard.py tests/test_tracker*.py tests/test_build_report*.py 2>/dev/null | sed 's#/#.#; s#\.py$##' || true)
+[ -n "$mods" ] || { echo "no dashboard unit tests found" >&2; exit 1; }
+.session/py/bin/python -m unittest -q $mods
+'''
+
+[tasks.check]
+description = "Everything dashboard-ci.yml checks without credentials: PII guard, Python unit tests, dashboard (tofu fmt/validate, node tests)"
+depends = ["session:setup"]
+run = [
+  ".session/py/bin/python tools/pii_guard.py --all",
+  "mise run test:dashboard",
+  "cd app && mise run check",
+]

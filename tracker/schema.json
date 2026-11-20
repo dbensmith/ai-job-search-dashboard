@@ -1,0 +1,215 @@
+{
+  "categories": [
+    "security_architecture",
+    "ai_security",
+    "enterprise_security_eng",
+    "product_security",
+    "cloud_security",
+    "security_leadership",
+    "grc",
+    "presales",
+    "other"
+  ],
+  "channels": [
+    "employer_site",
+    "linkedin",
+    "referral",
+    "recruiter",
+    "network",
+    "other"
+  ],
+  "currencies": [
+    "CAD",
+    "USD"
+  ],
+  "editable": [
+    "category",
+    "channel",
+    "closed_on",
+    "comp",
+    "comp_currency",
+    "comp_max",
+    "comp_min",
+    "company",
+    "contact",
+    "cover_letter_file",
+    "cv_file",
+    "deadline",
+    "fit",
+    "flags",
+    "location_mode",
+    "notes",
+    "pack",
+    "posted_on",
+    "priority",
+    "referral",
+    "region",
+    "role",
+    "role_type",
+    "sector",
+    "seniority",
+    "skip_reason",
+    "source",
+    "url",
+    "validated_on",
+    "work_auth"
+  ],
+  "event_columns": [
+    "date",
+    "id",
+    "type",
+    "company",
+    "role",
+    "field",
+    "value",
+    "note",
+    "artifact",
+    "commit"
+  ],
+  "event_status": {
+    "applied": "applied",
+    "decided_to_apply": "considering",
+    "drafted": "drafted",
+    "found": "found",
+    "hired": "hired",
+    "interview": "interview",
+    "no_response": "no_response",
+    "offer": "offer",
+    "offer_declined": "offer_declined",
+    "rejected": "rejected",
+    "skipped": "skipped",
+    "withdrawn": "withdrawn"
+  },
+  "event_types": [
+    "found",
+    "validated",
+    "decided_to_apply",
+    "drafted",
+    "outreach_sent",
+    "applied",
+    "response_received",
+    "screen_scheduled",
+    "interview",
+    "follow_up_sent",
+    "offer",
+    "hired",
+    "rejected",
+    "no_response",
+    "offer_declined",
+    "withdrawn",
+    "skipped",
+    "role_closed",
+    "set"
+  ],
+  "final": [
+    "hired",
+    "no_response",
+    "offer_declined",
+    "rejected",
+    "skipped",
+    "withdrawn"
+  ],
+  "int_fields": [
+    "comp_max",
+    "comp_min",
+    "fit"
+  ],
+  "location_modes": [
+    "remote",
+    "hybrid",
+    "onsite",
+    "unknown"
+  ],
+  "priorities": [
+    "high",
+    "normal",
+    "low"
+  ],
+  "schema_version": 3,
+  "seniority": [
+    "senior",
+    "staff",
+    "principal",
+    "manager",
+    "director"
+  ],
+  "skip_reasons": [
+    "location",
+    "onsite",
+    "work_auth",
+    "on_call",
+    "level",
+    "comp",
+    "closed",
+    "domain",
+    "management",
+    "governance",
+    "unverified",
+    "other"
+  ],
+  "stages": [
+    "recruiter_screen",
+    "hiring_manager",
+    "technical",
+    "panel",
+    "final"
+  ],
+  "statuses": [
+    "found",
+    "considering",
+    "drafted",
+    "applied",
+    "interview",
+    "offer",
+    "hired",
+    "rejected",
+    "no_response",
+    "offer_declined",
+    "withdrawn",
+    "skipped"
+  ],
+  "transitions": {
+    "applied": [
+      "interview",
+      "no_response",
+      "offer",
+      "rejected",
+      "withdrawn"
+    ],
+    "considering": [
+      "applied",
+      "drafted",
+      "skipped"
+    ],
+    "drafted": [
+      "applied",
+      "considering",
+      "skipped"
+    ],
+    "found": [
+      "considering",
+      "drafted",
+      "skipped"
+    ],
+    "interview": [
+      "interview",
+      "no_response",
+      "offer",
+      "rejected",
+      "withdrawn"
+    ],
+    "offer": [
+      "hired",
+      "offer_declined",
+      "rejected",
+      "withdrawn"
+    ]
+  },
+  "work_auth": [
+    "canada",
+    "us_via_subsidiary",
+    "us_only",
+    "philippines",
+    "unknown"
+  ]
+}

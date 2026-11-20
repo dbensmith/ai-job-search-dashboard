@@ -1,0 +1,161 @@
+# Checks and deploys the dashboard (app/ and the static site/ built by tools/build_report.py) with no buttons to press. Every command is a mise task (app/mise.toml) that also runs locally. One job, path-filtered, to keep Actions minutes low.
+#   pull request  : unit tests, tofu fmt/validate, then (same-repo PRs only) a read-only dry run: preflight and
+#                   `tofu plan`, posted as a PR comment and job summary. Nothing is created or changed.
+#   push to master: the same, then APPLY if the repository variable DEPLOY_AUTO_APPLY is "true"; otherwise plan only.
+#   manual run    : mode plan or apply (apply plans and applies in the same job).
+# Deploys are OFF by default: unless the repository variable DASHBOARD_DEPLOY is "true" (set only in the repo that owns the
+# Cloudflare account), this workflow only validates (tofu fmt/validate, node tests, a build of the site from sample data) and
+# never reads a secret. Fork and Dependabot PRs, and a repo with no deploy settings yet, only run the checks. Missing or wrong settings fail
+# the run with a list of exactly which names to set and where (the "Preflight" steps). Setup and scenarios: app/DEPLOY.md.
+name: Dashboard
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "tools/build_report.py"
+      - "tracker/**"
+      - ".github/workflows/deploy-dashboard.yml"
+  push:
+    branches: [master]
+    paths:
+      - "app/**"
+      - "tools/build_report.py"
+      - "tracker/**"
+      - ".github/workflows/deploy-dashboard.yml"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "plan: show what would change. apply: plan, then apply that plan."
+        type: choice
+        options: [plan, apply]
+        default: plan
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: dashboard-${{ github.event_name == 'pull_request' && github.ref || 'deploy' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  dashboard:
+    # Only the default branch may touch production; a side branch cannot read the secrets except through the read-only PR dry run.
+    if: github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app
+    env:
+      # DASHBOARD_DEPLOY must be "true" for anything beyond the checks. Forks and Dependabot get no secrets: they run the checks only. So does a repo with no deploy settings at all
+      # (Cloudflare not set up yet, or someone using the repo without it): checks pass, and the job summary says how to
+      # turn deploys on. Any setting present, or a manual run, goes on to the preflight, which names what is missing.
+      CLOUD: ${{ vars.DASHBOARD_DEPLOY == 'true' && (github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && github.actor != 'dependabot[bot]')) && (github.event_name == 'workflow_dispatch' || vars.OP_VAULT != '' || secrets.CLOUDFLARE_API_TOKEN != '' || secrets.CLOUDFLARE_HOSTNAME != '' || vars.CLOUDFLARE_HOSTNAME != '' || secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAILS != '' || vars.CLOUDFLARE_ACCESS_ALLOWED_EMAILS != '')) }}
+      MODE: ${{ github.event_name == 'pull_request' && 'dry-run' || github.event_name == 'workflow_dispatch' && inputs.mode || (vars.DEPLOY_AUTO_APPLY == 'true' && 'apply' || 'plan') }}
+      # Settings source, the same rule the mise tasks follow locally: repository variable OP_VAULT set means 1Password
+      # (every task runs under `op run --env-file app/1password.env`, signed in as the service account in
+      # OP_SERVICE_ACCOUNT_TOKEN); unset means the GitHub secrets below. Both at once fails the preflight by name, so the
+      # secrets are always passed through. `op` comes from app/mise.lock (checksummed), as on a dev box.
+      OP_VAULT: ${{ vars.OP_VAULT }}
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ vars.OP_VAULT != '' && secrets.OP_SERVICE_ACCOUNT_TOKEN || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      # State and plan encryption key (env mode; in 1Password mode it comes from the vault).
+      TF_ENCRYPTION: ${{ secrets.TF_ENCRYPTION }}
+      CLOUDFLARE_HOSTNAME: ${{ secrets.CLOUDFLARE_HOSTNAME || vars.CLOUDFLARE_HOSTNAME }}
+      CLOUDFLARE_ACCESS_ALLOWED_EMAILS: ${{ secrets.CLOUDFLARE_ACCESS_ALLOWED_EMAILS || vars.CLOUDFLARE_ACCESS_ALLOWED_EMAILS }}
+      # Optional overrides; deploy.mjs derives both from the hostname's zone.
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_ACCESS_TEAM_NAME: ${{ vars.CLOUDFLARE_ACCESS_TEAM_NAME }}
+      COMMENT_FILE: /tmp/dashboard-report.md
+      MISE_TRUSTED_CONFIG_PATHS: ${{ github.workspace }}/app
+    steps:
+      - name: Keep the hostname and emails out of the log
+        if: env.CLOUD == 'true'
+        working-directory: .
+        run: |
+          for v in "$CLOUDFLARE_HOSTNAME" ${CLOUDFLARE_ACCESS_ALLOWED_EMAILS//,/ }; do
+            [ -n "$v" ] && echo "::add-mask::$v"
+          done
+          exit 0
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      # Tools and tasks come from app/mise.toml (versions checksummed in mise.lock), so CI runs exactly what
+      # `mise run <task>` runs on a dev box. See app/DEPLOY.md, "Local development".
+      - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+        with:
+          # renovate: datasource=github-releases depName=jdx/mise extractVersion=^v(?<version>.+)$
+          version: 2026.11.10
+          working_directory: app
+          cache: true
+          persist_github_token: false
+
+      # Checks: no credentials, run for everyone.
+      - name: Check (tofu fmt, tofu validate, unit tests)
+        run: mise run check
+
+      # The static site that Cloudflare serves. Without deploys it is built from the sample events, so a fork needs no data.
+      - name: Build the site
+        working-directory: .
+        env:
+          SITE_ARGS: ${{ env.CLOUD == 'true' && '' || '--events tracker/examples/events.csv' }}
+        run: python3 tools/build_report.py $SITE_ARGS --out site
+
+      - name: Note that deploys are not set up
+        if: env.CLOUD != 'true'
+        working-directory: .
+        run: |
+          echo "Checks only: deploys are off (repository variable DASHBOARD_DEPLOY is not true), no deploy settings are configured, or this is a fork or Dependabot PR, so nothing was planned. To turn deploys on, see app/DEPLOY.md." >> "$GITHUB_STEP_SUMMARY"
+
+      # Preflight 1: names the active settings source and lists every missing name and where to set it. In 1Password
+      # mode it runs inside `op run`, so it checks the values the vault actually returned (op masks them in the log).
+      - name: "Preflight: settings"
+        if: env.CLOUD == 'true'
+        run: mise run preflight-names
+
+      # Preflight 2: does the token work and have every permission? Names each one it lacks. Read-only.
+      - name: "Preflight: Cloudflare token"
+        if: env.CLOUD == 'true'
+        run: mise run preflight-token
+
+      # dry-run (PRs): creates nothing, plans against current state. plan: also ensures the empty state bucket.
+      # apply: plans, then applies that same saved plan; refuses a plan that deletes or replaces anything.
+      - name: Plan or apply
+        if: env.CLOUD == 'true'
+        run: |
+          case "$MODE" in
+            dry-run) mise run plan ;;
+            plan)    mise run plan-save ;;
+            apply)   mise run apply --confirm-apply ;;
+          esac
+
+      - name: Note that auto-apply is off
+        if: env.CLOUD == 'true' && github.event_name == 'push' && env.MODE == 'plan'
+        working-directory: .
+        run: echo "Auto-apply is off, so this run only planned. To apply on every merge, set the repository variable DEPLOY_AUTO_APPLY to true; to apply once, run this workflow with mode apply." >> "$GITHUB_STEP_SUMMARY"
+
+      # Posts one comment per commit that ran the plan (or what to fix), so each push keeps its own result in the PR
+      # history. A re-run of the same commit updates that commit's comment. Same-repo PRs only; the report has the
+      # hostname and email addresses replaced. Only changes under the `paths` filters at the top start this workflow.
+      - name: Comment on the pull request
+        if: always() && env.CLOUD == 'true' && github.event_name == 'pull_request'
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          [ -f "$COMMENT_FILE" ] || exit 0
+          marker="<!-- dashboard-deploy-report sha=$SHA -->"
+          body="$marker"$'\n'"Commit \`${SHA:0:7}\`"$'\n'$(tail -n +2 "$COMMENT_FILE" | head -c 60000)
+          id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" \
+            --jq "[.[] | select(.body | startswith(\"$marker\"))][0].id // empty")
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+          else
+            gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" >/dev/null
+          fi

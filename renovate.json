@@ -1,0 +1,135 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "description": "Free private repo: no native GitHub auto-merge, and Actions minutes are capped, so Renovate merges itself and runs weekly (security fixes still go out immediately). Each run opens at most two PRs (plus any pre-1.0 minor, and a monthly lock-file refresh) - one automerged non-major group and one major group for review - so every update costs one CI run. Branches are rebased only on conflict, not every time master moves, so each update runs CI once.",
+  "platformAutomerge": false,
+  "schedule": [
+    "before 6am on monday"
+  ],
+  "timezone": "America/Denver",
+  "rebaseWhen": "conflicted",
+  "packageRules": [
+    {
+      "description": "Keep npm dependencies as exact versions, matching the pinned style used everywhere else (action SHAs, container digest, requirements-ci.txt).",
+      "matchManagers": [
+        "npm"
+      ],
+      "rangeStrategy": "pin"
+    },
+    {
+      "description": "One PR for every non-major update across all managers (actions, mise tools, OpenTofu providers, Python, npm), automerged once CI passes.",
+      "matchUpdateTypes": [
+        "minor",
+        "patch",
+        "digest",
+        "pin",
+        "pinDigest"
+      ],
+      "groupName": "non-major dependencies",
+      "groupSlug": "all-minor-patch",
+      "automerge": true
+    },
+    {
+      "description": "One PR for every major update across all managers; never automerged, the maintainer reviews it.",
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "major dependencies",
+      "groupSlug": "all-major",
+      "automerge": false
+    },
+    {
+      "description": "Pre-1.0 minor bumps can break, so keep them out of the automerged group.",
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "matchCurrentVersion": "/^v?0\\./",
+      "groupName": null,
+      "automerge": false
+    },
+    {
+      "description": "uv stays on 0.x but CI exercises it on every run, so its minor bumps rejoin the automerged non-major group (the maintainer's call).",
+      "matchPackageNames": [
+        "uv"
+      ],
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "groupName": "non-major dependencies",
+      "groupSlug": "all-minor-patch",
+      "automerge": true
+    },
+    {
+      "description": "mise uses calendar versions, so a new year looks like a major bump; CI exercises it on every run, so it stays in the automerged non-major group.",
+      "matchDepNames": [
+        "jdx/mise"
+      ],
+      "matchUpdateTypes": [
+        "major"
+      ],
+      "groupName": "non-major dependencies",
+      "groupSlug": "all-minor-patch",
+      "automerge": true
+    },
+    {
+      "description": "The 1Password CLI in app/mise.toml installs through aqua's http backend, which has no version list: read versions from 1Password's feed instead.",
+      "matchManagers": [
+        "mise"
+      ],
+      "matchDepNames": [
+        "aqua:1password/cli"
+      ],
+      "overrideDatasource": "custom.op-cli"
+    },
+    {
+      "description": "OpenTofu providers resolve against the OpenTofu registry (registry.opentofu.org), the same one `tofu init` uses, not registry.terraform.io.",
+      "matchDatasources": [
+        "terraform-provider"
+      ],
+      "registryUrls": [
+        "https://registry.opentofu.org"
+      ]
+    }
+  ],
+  "pip_requirements": {
+    "description": "The requirements-*.txt files are compiled with hashes, so the pip-compile manager owns them; there are no other requirements files.",
+    "enabled": false
+  },
+  "pip-compile": {
+    "description": "Recompile requirements-ci.txt and requirements-uv.txt (hashes and transitive pins) from their .in files on every update.",
+    "managerFilePatterns": [
+      "/(^|/)requirements-(ci|uv)\\.txt$/"
+    ]
+  },
+  "lockFileMaintenance": {
+    "description": "Refresh transitive pins (app/package-lock.json, requirements-*.txt) once a month, automerged once CI passes.",
+    "enabled": true,
+    "automerge": true,
+    "schedule": [
+      "before 6am on the first day of the month"
+    ]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "The mise version that jdx/mise-action installs (workflow input), kept in step with the mise release; tools in app/mise.toml and checksums in app/mise.lock are handled by Renovate's mise manager.",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/.+\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s+version: (?<currentValue>\\S+)"
+      ]
+    }
+  ],
+  "customDatasources": {
+    "op-cli": {
+      "description": "1Password CLI releases (no GitHub releases to read): 1Password's own update feed returns the latest stable version.",
+      "defaultRegistryUrlTemplate": "https://app-updates.agilebits.com/check/1/0/CLI2/en/2.0.0/N",
+      "transformTemplates": [
+        "{\"releases\": [{\"version\": version}]}"
+      ]
+    }
+  }
+}
