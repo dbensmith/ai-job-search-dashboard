@@ -1,0 +1,5 @@
+#!/bin/sh
+# PII guard (see PRIVACY.md). Enabled with: python tools/pii_guard.py --install-hooks
+root=$(git rev-parse --show-toplevel) || exit 1
+py=$(command -v python3 || command -v python) || { echo "pii_guard: python not found, commit blocked" >&2; exit 1; }
+exec "$py" "$root/tools/pii_guard.py" --message-file "$1"

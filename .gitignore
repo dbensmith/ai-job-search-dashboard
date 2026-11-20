@@ -121,3 +121,24 @@ company_research/*.json
 
 # Brainstorm mockups (superpowers visual companion) - never ship
 .superpowers/
+
+# Dashboard (static site build output, local PII denylist, session bootstrap)
+.pii-denylist
+site/
+.session/
+
+# Dashboard app: tooling output and local settings (never committed)
+app/.env
+app/.env.local
+app/.wrangler/
+app/node_modules/
+app/dist/
+app/infra/.terraform/
+app/infra/bootstrap/.terraform/
+app/infra/bootstrap/backend_override.tf
+app/infra/bootstrap/*.tfstate*
+*.tfplan
+*.tfstate
+*.tfstate.*
+.private/
+CLAUDE.local.md

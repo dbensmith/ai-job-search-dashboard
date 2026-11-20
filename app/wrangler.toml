@@ -1,0 +1,11 @@
+# Local preview (`npm run preview`) and the bundle check (`npm run bundle`). Production is OpenTofu's (infra/main.tf):
+# it uploads the same static folder with the same compatibility_date and assets settings.
+name = "ai-job-search-dashboard"
+compatibility_date = "2026-11-01"
+workers_dev = false          # only reachable on the custom domain, which sits behind Cloudflare Access
+preview_urls = false
+
+# The custom domain is OpenTofu's (cloudflare_workers_custom_domain); no routes here.
+
+[assets]
+directory = "../site"        # written by `python tools/build_report.py --out site`; static files only, no Worker code

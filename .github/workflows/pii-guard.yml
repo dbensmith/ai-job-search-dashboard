@@ -1,0 +1,40 @@
+# PII guard for the pull requests ci.yml skips. ci.yml ignores PRs that touch only
+# cv/, cover_letters/ and company_research/, which is exactly where personal data
+# would land, so this workflow takes those paths and nothing else: a PR never pays
+# for both. Standard library Python only, no installs. See PRIVACY.md.
+name: PII guard
+
+on:
+  pull_request:
+    paths:
+      - "cv/**"
+      - "cover_letters/**"
+      - "company_research/**"
+      - "!cv/main_example.tex"
+      - "!cover_letters/cover_example.tex"
+      - "!cover_letters/cover.cls"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pii-guard:
+    name: PII guard
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: PII guard (added lines, commit messages, every tracked file)
+        env:
+          PII_DENYLIST: ${{ secrets.PII_DENYLIST }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          python3 tools/pii_guard.py --range "$BASE...HEAD"
+          python3 tools/pii_guard.py --all

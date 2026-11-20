@@ -1,0 +1,123 @@
+# One toolchain and one set of tasks for the dashboard, used identically on a dev box, in an agent sandbox and in CI
+# (.github/workflows/deploy-dashboard.yml runs these same tasks). Quickstart: app/DEPLOY.md, "Local development".
+#   mise install          installs the pinned tools (checksums in mise.lock)
+#   mise tasks            lists the tasks
+[settings]
+lockfile = true            # mise.lock holds the checksums of the pinned tools
+experimental = true
+task.output = "interleave"  # no [task] prefixes, so GitHub ::error annotations and logs read the same as locally
+
+[env]
+_.file = [".env", ".env.local"]   # git-ignored; `mise run setup` writes OP_VAULT here for 1Password mode. Real environment variables win
+
+[tools]
+node = "26.13.1"
+opentofu = "1.13.9"        # same as CI; wrangler is pinned in package.json / package-lock.json
+# 1Password CLI for 1Password mode (OP_VAULT set): op run --env-file 1password.env. Installed only from mise.lock checksums.
+"aqua:1password/cli" = "2.42.0"
+
+# --- offline: no credentials, no Cloudflare. `install` and the first `validate` download packages once. -------------
+
+[tasks.install]
+description = "npm ci (wrangler and nothing else); skipped when node_modules is current"
+sources = ["package-lock.json", "package.json"]
+outputs = ["node_modules/.package-lock.json"]
+run = "npm ci --ignore-scripts --no-audit --no-fund"
+
+[tasks.test]
+description = "Unit tests (offline, fake Cloudflare API)"
+run = "npm test"
+
+[tasks.fmt]
+description = "OpenTofu format check (offline)"
+run = "tofu -chdir=infra fmt -check -diff -recursive"
+
+[tasks.validate]
+description = "tofu init -backend=false and validate (needs the provider downloaded once, then offline)"
+run = [
+  "tofu -chdir=infra init -backend=false -input=false >/dev/null",
+  "tofu -chdir=infra validate",
+  "tofu -chdir=infra/bootstrap init -backend=false -input=false >/dev/null",
+  "tofu -chdir=infra/bootstrap validate",
+]
+
+[tasks.site]
+description = "Build the static site into site/ from the tracker CSV and events (python tools/build_report.py --out site)"
+dir = "{{config_root}}/.."
+run = "python3 tools/build_report.py --out site"
+
+[tasks.check]
+description = "Everything CI checks without credentials: fmt, validate, test"
+depends = ["fmt", "validate", "test"]
+
+[tasks.pii-scan]
+description = "PII guard over every tracked file in the repo (same check as CI and the git hooks; see PRIVACY.md)"
+dir = "{{config_root}}/.."
+run = "python3 tools/pii_guard.py --all"
+
+[tasks.pii-hooks]
+description = "Enable the PII guard git hooks (pre-commit, commit-msg) for this clone"
+dir = "{{config_root}}/.."
+run = "python3 tools/pii_guard.py --install-hooks"
+
+# --- bootstrap: run once on a fresh deployment, before anything else -----------------------------------------------
+
+[tasks.setup]
+description = "Bootstrap: store the settings as GitHub secrets (env) or in a 1Password vault (1password, sets OP_VAULT); switching removes the other source. Asks for anything not given"
+dir = "{{config_root}}"
+usage = '''
+flag "--source <source>" help="env (plain variables; GitHub secrets in CI) or 1password (a 1Password vault)"
+flag "--vault <vault>" help="1Password vault (1password only; default ai-job-search, created if missing)"
+flag "--keep-service-account" help="1password only: do not create a new CI service account (re-runs)"
+flag "--hostname <hostname>" help="Dashboard hostname on a Cloudflare zone"
+flag "--emails <emails>" help="Sign-in emails, comma-separated"
+flag "--guest-local <name>" help="Guest alias before the @ (default job-search-guest; empty to skip)"
+flag "--repo <repo>" help="owner/name (default: this clone's repo)"
+'''
+run = "bash scripts/setup.sh"
+
+# --- read-only against Cloudflare: need the settings (see `settings` below) ---------------------------------------
+# Every task below runs through deploy/with-settings.mjs: plain env, or `op run --env-file 1password.env` when OP_VAULT is set.
+
+[tasks.preflight-names]
+description = "Preflight 1 (same as CI): names every missing or invalid setting and where to set it. No network"
+run = "node deploy/with-settings.mjs node deploy/deploy.mjs --preflight-names"
+
+[tasks.preflight-token]
+description = "Preflight 2 (same as CI): the token works and has every permission; names each one it lacks. Read-only"
+run = "node deploy/with-settings.mjs node deploy/deploy.mjs --preflight-token"
+
+[tasks.preflight]
+description = "Both preflight steps, as CI runs them"
+depends = ["preflight-names", "preflight-token"]
+
+[tasks.plan]
+description = "Dry-run plan against current Cloudflare state. Read-only: creates nothing, not even the state bucket. Needs site/ (mise run site)"
+depends = ["install"]
+run = "node deploy/with-settings.mjs node deploy/deploy.mjs --dry-run"
+
+[tasks.settings]
+description = "Show where the settings would come from (1Password vault, .env or environment) and which are set. Never prints values"
+run = "node deploy/with-settings.mjs --show"
+
+# --- writes: deliberate ---------------------------------------------------------------------------------------------
+
+[tasks.plan-save]
+description = "Plan and save it for apply. Creates only the empty OpenTofu state bucket if it is missing. Needs site/"
+depends = ["install"]
+run = "node deploy/with-settings.mjs node deploy/deploy.mjs"
+
+[tasks.apply]
+description = "Plan, then apply that plan to Cloudflare (infrastructure, Worker and the static site). Refuses without --confirm-apply"
+depends = ["install"]
+usage = '''
+flag "--confirm-apply" help="Required. Without it nothing is changed."
+'''
+run = '''
+if [ "${usage_confirm_apply:-}" != "true" ]; then
+  echo "Refusing to change Cloudflare without --confirm-apply. Read-only first: mise run plan" >&2
+  exit 2
+fi
+node deploy/with-settings.mjs node deploy/deploy.mjs
+node deploy/with-settings.mjs node deploy/deploy.mjs --apply
+'''
