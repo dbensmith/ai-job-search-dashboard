@@ -278,7 +278,7 @@ test("resolveSettings: OP_VAULT runs op with the committed reference file; nothi
 });
 
 test("resolveSettings: both sources at once is an error naming each leftover, in env, .env or CI secrets", () => {
-  const r = resolveSettings({ OP_VAULT: "ops", CLOUDFLARE_API_TOKEN: "old", CLOUDFLARE_HOSTNAME: "" }, { CLOUDFLARE_ACCESS_ALLOWED_EMAILS: "a@b.co" }, { hasOp: true });
+  const r = resolveSettings({ OP_VAULT: "ops", CLOUDFLARE_API_TOKEN: "old", CLOUDFLARE_HOSTNAME: "" }, { CLOUDFLARE_ACCESS_ALLOWED_EMAILS: "a@example.com" }, { hasOp: true });
   assert.match(r.error, /CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCESS_ALLOWED_EMAILS are also set/);
   assert.doesNotMatch(r.error, /CLOUDFLARE_HOSTNAME/); // an empty CI secret counts as unset
   assert.ok(r.child); // the names preflight can still run and report it
