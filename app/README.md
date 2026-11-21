@@ -6,7 +6,7 @@ A read-only dashboard of the job search: found, checked, drafted, applied, repli
 - `deploy/` the plan-first deploy script and the settings loader (environment variables or a 1Password vault)
 - `wrangler.toml` local preview (`npm run preview`) and the bundle check (`npm run bundle`); production is OpenTofu's
 - `../tracker/examples/` fictional sample data (the public demo is built from it)
-- `docs/design/` [data pipeline](docs/design/data-pipeline.md), [secrets management](docs/design/secrets-management.md)
+- `docs/design/` [data pipeline](docs/design/data-pipeline.md), [secrets management](docs/design/secrets-management.md), [onboarding plan](docs/design/onboarding.md)
 
 ## Security model
 
