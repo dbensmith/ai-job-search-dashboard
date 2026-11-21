@@ -121,6 +121,18 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>\\S+) depName=(?<depName>\\S+)(?: extractVersion=(?<extractVersion>\\S+))?\\s+version: (?<currentValue>\\S+)"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "commitizen, run through uvx in the release workflow (no manifest that a built-in manager reads).",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/release\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "uvx --from commitizen==(?<currentValue>\\S+) "
+      ],
+      "depNameTemplate": "commitizen",
+      "datasourceTemplate": "pypi"
     }
   ],
   "customDatasources": {

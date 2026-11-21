@@ -43,7 +43,7 @@ jobs:
   dashboard:
     # Only the default branch may touch production; a side branch cannot read the secrets except through the read-only PR dry run.
     if: github.event_name == 'pull_request' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 15
     defaults:
       run:

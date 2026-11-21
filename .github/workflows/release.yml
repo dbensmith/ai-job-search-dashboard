@@ -36,7 +36,7 @@ jobs:
       contents: write
       actions: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: master
           fetch-depth: 0
@@ -61,7 +61,7 @@ jobs:
             next="v$VERSION"
           else
             rc=0
-            next=$(uvx --from commitizen==4.19.3 cz bump --get-next) || rc=$?
+            next=$(uvx --from commitizen==4.19.4 cz bump --get-next) || rc=$?
             case $rc in
               0) next="v$next" ;;
               21) echo "No feat, fix, refactor, perf or breaking commits since $last, nothing to release"; exit 0 ;;
