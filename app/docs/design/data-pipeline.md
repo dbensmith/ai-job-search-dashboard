@@ -23,5 +23,5 @@ Nothing is written back from the page. To change a record, change the CSV and re
 
 ## Where it runs
 
-- **Private deployment:** `deploy-dashboard.yml` builds `site/` from the real data and, only when the repository variable `DASHBOARD_DEPLOY` is `true`, plans and applies it. Cloudflare Access is the only front door.
+- **Real-data deployment:** not wired into CI yet (plan step 8, needs the owner's go-ahead). The private repo that holds the real records builds `site/` with its own copy of `tools/build_report.py`; the hosting code (`app/`, OpenTofu, the workflow) lives only in this repository. With `DASHBOARD_DEPLOY` set to `true` in a repository that has the records, `deploy-dashboard.yml` builds `site/` from them and plans and applies it. Cloudflare Access is the only front door.
 - **Public fork:** `deploy-dashboard.yml` only validates (tofu fmt/validate, node tests, a build from sample data). `pages.yml` publishes a demo built from `tracker/examples/events.csv` to GitHub Pages. Sample data only.
