@@ -69,5 +69,43 @@ class Report(unittest.TestCase):
         self.assertEqual(b.main(["--events", "/nope.csv", "--csv", "/nope2.csv", "--out", "/tmp/claude-0/x"]), 2)
 
 
+def rec(rid, status, reached, applied=None, responded=None, company="Acme"):
+    return {"id": rid, "company": company, "role": "SA", "status": status, "sector": "", "channel": "", "fit": None,
+            "date": applied or "2026-01-01", "applied_on": applied, "responded_on": responded, "reached": reached,
+            "url": "", "comp_max": None, "currency": "", "notes": "", "skip_reason": "", "stage": "",
+            "artifacts": [], "dates": []}
+
+
+class Stats(unittest.TestCase):
+    def test_a_drafted_role_is_never_counted_as_sent(self):
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "acme_sa").mkdir()
+            (Path(d) / "acme_sa" / "outcome.md").write_text("- [x] CV tailored\n", encoding="utf-8")
+            records = [rec("acme_sa", "drafted", 0)]
+            b.merge_outcomes(records, Path(d))
+        s = b.stats(records, None, None)
+        self.assertEqual((s["sent"], s["drafted"]), (0, 1))
+        self.assertEqual(s["funnel"][0], ("Applied", 0))
+
+    def test_a_reply_before_the_application_is_not_a_response_time(self):
+        records = [rec(f"r{i}", "applied", 1, applied="2026-01-10", responded="2026-01-12", company=f"C{i}") for i in range(5)]
+        self.assertEqual(b.stats(records, None, None)["median_days"], 2)
+        role = {"id": "x", "company": "X", "role": "SA", "status": "applied", "found_on": "2026-01-01", "history": [],
+                "events": [], "actions": [{"date": "2026-01-03", "type": "response_received"},
+                                          {"date": "2026-01-10", "type": "applied"}]}
+        self.assertIsNone(b.records_from_events([role])[0]["responded_on"])
+
+    def test_rejected_counts_as_a_response_in_csv_mode(self):
+        records = [rec(f"r{i}", "rejected", 1, company=f"C{i}") for i in range(5)]
+        self.assertEqual(b.stats(records, None, None)["response_rate"], 1.0)
+
+    def test_csv_with_bom_and_short_rows(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d, "t.csv")
+            f.write_bytes(b"\xef\xbb\xbfdate,company,role,status,source\n2026-01-01,Acme,SA,applied\n")
+            row = b.records_from_csv(f)[0]
+        self.assertEqual((row["date"], row["url"]), ("2026-01-01", ""))
+
+
 if __name__ == "__main__":
     unittest.main()
