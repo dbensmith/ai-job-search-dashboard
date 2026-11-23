@@ -17,6 +17,8 @@ concurrency:
 
 jobs:
   build:
+    # GitHub Pages is unavailable on private free-plan repositories; skip there and run normally on public forks.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -34,6 +36,8 @@ jobs:
           path: site
 
   deploy:
+    # GitHub Pages is unavailable on private free-plan repositories; skip there and run normally on public forks.
+    if: ${{ !github.event.repository.private }}
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
