@@ -48,7 +48,9 @@ def records_from_events(roles: list) -> list:
     out = []
     for r in roles:
         applied = next((a["date"] for a in r["actions"] if a["type"] == "applied"), None)
-        resp = next((a["date"] for a in r["actions"] if a["type"] in RESPONSE_EVENTS), None)
+        # A reply before the application (referral outreach) is not a reply to the application.
+        resp = next((a["date"] for a in r["actions"]
+                     if a["type"] in RESPONSE_EVENTS and not (applied and a["date"] < applied)), None)
         reached = 1 if applied else 0
         if resp:
             reached = max(reached, 1)
@@ -67,10 +69,11 @@ def records_from_events(roles: list) -> list:
 
 def records_from_csv(path: Path) -> list:
     out = []
-    with open(path, encoding="utf-8", newline="") as fh:
-        for row in csv.DictReader(fh):
-            st = (row.get("status") or "").strip().lower().replace(" ", "_")
-            fit = (row.get("fit_rating") or "").strip()
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        for raw in csv.DictReader(fh):
+            row = {k: (v or "") for k, v in raw.items() if k}  # short rows leave None values
+            st = row.get("status", "").strip().lower().replace(" ", "_")
+            fit = row.get("fit_rating", "").strip()
             out.append({"id": t.make_key(row.get("company", ""), row.get("role", "")), "company": row.get("company", ""),
                         "role": row.get("role", ""), "status": st, "sector": row.get("sector", ""),
                         "channel": row.get("channel", ""), "fit": int(fit) if fit.isdigit() else None,
@@ -94,10 +97,10 @@ def merge_outcomes(records: list, apps: Path) -> None:
 
 
 def stats(records: list, floor, currency) -> dict:
-    sent = [r for r in records if r["reached"] >= 1 and bucket_of(r["status"])]
+    sent = [r for r in records if r["reached"] >= 1 and bucket_of(r["status"]) and r["status"] != "drafted"]
     counts = {b: sum(bucket_of(r["status"]) == b for r in records) for b in BUCKETS}
     sent_n = len(sent)
-    responded = [r for r in sent if r["responded_on"] or r["reached"] >= 2]
+    responded = [r for r in sent if r["responded_on"] or r["reached"] >= 2 or r["status"] == "rejected"]
     days = []
     for r in sent:
         if r["applied_on"] and r["responded_on"]:
