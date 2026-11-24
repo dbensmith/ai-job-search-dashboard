@@ -9,7 +9,8 @@ floor, and links to the evidence in the repo (path plus commit). No LLM, no netw
 
 With --events (default <root>/tracker/events.csv, when it exists) the CSV is derived from the log in a temporary
 folder and the add-on is written. Without a log, <root>/job_search_tracker.csv is rendered as upstream does, with no
-add-on. Output is <out>/index.html. Like upstream's, the page shows today's date and days waiting, so a rebuild on
+add-on. Output is <out>/index.html. If <root>/reports/archive/ exists, the page is also copied to
+<root>/reports/archive/YYYY-MM-DD.html, so a same-day rerun overwrites that day's copy (one record per day). Like upstream's, the page shows today's date and days waiting, so a rebuild on
 another day differs; the same day gives the same bytes.
 """
 from __future__ import annotations
@@ -131,6 +132,9 @@ def main(argv=None) -> int:
         page = page.replace("</main>", extra + "\n</main>", 1)
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "index.html").write_text(page, encoding="utf-8", newline="\n")
+    archive = args.root / "reports" / "archive"
+    if archive.is_dir():  # opt-in by creating the folder (the private repo does; the public fork never has it)
+        (archive / f"{date.today().isoformat()}.html").write_text(page, encoding="utf-8", newline="\n")
     print(f"ok: {args.out / 'index.html'}")
     return 0
 

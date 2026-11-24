@@ -2,6 +2,7 @@
 import sys
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
@@ -62,6 +63,20 @@ class Report(unittest.TestCase):
         self.assertEqual(rc, 0)
         self.assertIn("Acme", html)
         self.assertNotIn("From the events log", html)
+
+    def test_archive_copy_is_dated_and_overwritten_the_same_day(self):
+        with tempfile.TemporaryDirectory() as d:
+            arch = Path(d, "reports", "archive")
+            arch.mkdir(parents=True)
+            for _ in range(2):
+                self.assertEqual(b.main(["--root", d, "--events", str(SAMPLE), "--out", str(Path(d, "site"))]), 0)
+            self.assertEqual([p.name for p in arch.iterdir()], [f"{date.today().isoformat()}.html"])
+            self.assertEqual(build()[1].count("Demo Systems") > 0, True)
+
+    def test_no_archive_folder_means_no_archive(self):
+        with tempfile.TemporaryDirectory() as d:
+            b.main(["--root", d, "--events", str(SAMPLE), "--out", str(Path(d, "site"))])
+            self.assertFalse(Path(d, "reports").exists())
 
     def test_missing_inputs(self):
         self.assertEqual(b.main(["--root", "/nope", "--events", "/nope.csv", "--out", "/tmp/claude-0/x"]), 2)
