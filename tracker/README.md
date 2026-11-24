@@ -40,6 +40,4 @@ python3 tools/build_report.py --out site       # the dashboard: site/index.html
 
 ## Dashboard
 
-`tools/build_report.py` runs upstream's `tools/html_report.py` (no LLM, no network) on the root `job_search_tracker.csv`, which it derives from the log, and adds a panel with response rate, median days to reply, pay against the floor and links to the evidence (rates are suppressed under 5 applications). It writes a self-contained `site/index.html`; like upstream's, the page shows today's date, so the same input gives the same bytes only within a day. Serve the folder anywhere. This repo publishes a demo from the sample data to GitHub Pages; `app/` deploys it to Cloudflare behind Access.
-
-If a repository has a `reports/archive/` folder, each build also saves that day's page as `reports/archive/YYYY-MM-DD.html` (same-day reruns overwrite it), publishes every archived page under `site/reports/` and links them from a "Past reports" list on the dashboard. This public repo has no such folder, so it archives nothing; a private data repo creates the folder and commits the copies.
+`tools/build_report.py` runs upstream's `tools/html_report.py` (no LLM, no network) on the root `job_search_tracker.csv`, which it derives from the log, and writes upstream's page unchanged to `site/index.html`, self-contained; like upstream's, the page shows today's date, so the same input gives the same bytes only within a day. Serve the folder anywhere. This repo publishes a demo from the sample data to GitHub Pages; `app/` deploys it to Cloudflare behind Access.
