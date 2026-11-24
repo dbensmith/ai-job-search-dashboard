@@ -1,0 +1,13 @@
+# Dashboard app: tooling output and local settings (never committed). Lives here so the root .gitignore stays upstream's.
+.env
+.env.local
+.wrangler/
+node_modules/
+dist/
+infra/.terraform/
+infra/bootstrap/.terraform/
+infra/bootstrap/backend_override.tf
+infra/bootstrap/*.tfstate*
+*.tfplan
+*.tfstate
+*.tfstate.*

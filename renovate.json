@@ -10,6 +10,13 @@
   ],
   "timezone": "America/Denver",
   "rebaseWhen": "conflicted",
+  "ignorePaths": [
+    ".github/workflows/ci.yml",
+    ".github/workflows/pr-title.yml",
+    ".github/workflows/release.yml",
+    ".github/workflows/upstream-watch.yml",
+    ".cz.toml"
+  ],
   "packageRules": [
     {
       "description": "Keep npm dependencies as exact versions, matching the pinned style used everywhere else (action SHAs, container digest, requirements-ci.txt).",
