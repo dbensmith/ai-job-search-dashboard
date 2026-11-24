@@ -71,12 +71,16 @@ class Report(unittest.TestCase):
             for _ in range(2):
                 self.assertEqual(b.main(["--root", d, "--events", str(SAMPLE), "--out", str(Path(d, "site"))]), 0)
             self.assertEqual([p.name for p in arch.iterdir()], [f"{date.today().isoformat()}.html"])
-            self.assertEqual(build()[1].count("Demo Systems") > 0, True)
+            site = Path(d, "site")
+            self.assertTrue(Path(site, "reports", f"{date.today().isoformat()}.html").exists())
+            self.assertIn(f'href="reports/{date.today().isoformat()}.html"', Path(site, "index.html").read_text(encoding="utf-8"))
+            self.assertNotIn("Past reports", Path(arch, f"{date.today().isoformat()}.html").read_text(encoding="utf-8"))
 
     def test_no_archive_folder_means_no_archive(self):
         with tempfile.TemporaryDirectory() as d:
             b.main(["--root", d, "--events", str(SAMPLE), "--out", str(Path(d, "site"))])
             self.assertFalse(Path(d, "reports").exists())
+            self.assertFalse(Path(d, "site", "reports").exists())
 
     def test_missing_inputs(self):
         self.assertEqual(b.main(["--root", "/nope", "--events", "/nope.csv", "--out", "/tmp/claude-0/x"]), 2)
