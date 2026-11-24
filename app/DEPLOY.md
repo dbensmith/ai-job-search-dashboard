@@ -43,7 +43,7 @@ jobs:
           # op-vault / cloudflare-api-token / tf-encryption / hostname / allowed-emails, as in deploy-dashboard.yml
 ```
 
-The action reads `tracker/events.csv`, `tracker/job_search_tracker.csv` and `documents/applications/` under `data-dir`, builds `site/` and runs the same preflight, plan and apply as this repo's own workflow. Without `data-dir` it builds the demo from `tracker/examples/events.csv`. It fails if `data-dir` is set and the calling repository is not private.
+The action reads `tracker/events.csv` and `documents/applications/` under `data-dir` (the root `job_search_tracker.csv` that upstream's report reads is derived from the log), builds `site/` and runs the same preflight, plan and apply as this repo's own workflow. Without `data-dir` it builds the demo from `tracker/examples/events.csv`. It fails if `data-dir` is set and the calling repository is not private.
 
 ## Local development (mise)
 

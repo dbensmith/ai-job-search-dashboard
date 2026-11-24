@@ -16,7 +16,7 @@ flowchart LR
 | Layer | Owner | Changes by |
 |---|---|---|
 | The records (applications, events) | the tracker CSV files, written by the tracker tools and Claude skills | commits to the data repo |
-| The page | `tools/build_report.py`: deterministic, same input gives the same `site/` | `python tools/build_report.py [--csv FILE] [--events FILE] [--out site]` |
+| The page | upstream's `tools/html_report.py`, run by `tools/build_report.py` (derives the CSV from the events log and adds a small events panel); same input and same day give the same `site/` | `python tools/build_report.py [--root DIR] [--events FILE] [--out site]` |
 | Hosting | OpenTofu (`app/infra/main.tf`): Worker with the static assets, custom domain, Access application and allowed-emails policy | plan and apply (`app/DEPLOY.md`) |
 
 Nothing is written back from the page. To change a record, change the CSV and rebuild; the next deploy replaces the site.
