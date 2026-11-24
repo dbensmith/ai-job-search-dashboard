@@ -1,0 +1,205 @@
+# The dashboard build and deploy, as one composite action. The public fork owns all of the logic (checks, the site build,
+# the Cloudflare preflight, plan and apply); a repository that holds real records calls it with a checkout of its own
+# data and passes its own settings. The records are read on the caller's runner only, so they never reach this
+# repository, its logs or its artifacts. Called from this repo's deploy-dashboard.yml (sample data) and from the private
+# repo's dashboard.yml (real data, pinned by commit SHA). Design: app/docs/design/data-pipeline.md; setup: app/DEPLOY.md.
+name: Dashboard
+description: Build the static dashboard from a data checkout, then plan or apply it to Cloudflare (OpenTofu, Access).
+
+inputs:
+  data-dir:
+    description: "Directory holding the records (tracker/events.csv, tracker/job_search_tracker.csv, documents/applications/). Empty builds the demo site from tracker/examples/events.csv. A non-empty value is refused unless the calling repository is private."
+    default: ""
+  mode:
+    description: "dry-run (plan, read-only), plan (plan and save, creates the empty state bucket), apply (plan, then apply that plan)."
+    default: dry-run
+  cloud:
+    description: "'true' to run the preflight and Cloudflare steps; anything else builds the site and stops."
+    default: "false"
+  checks:
+    description: "'true' to also run tofu fmt/validate and the node tests (this repo's own CI does; a data repo need not)."
+    default: "false"
+  op-vault:
+    description: 1Password vault name; set means settings come from 1Password (OP_VAULT).
+    default: ""
+  op-service-account-token:
+    description: 1Password service account token (only with op-vault).
+    default: ""
+  cloudflare-api-token:
+    description: Cloudflare API token (when op-vault is not set).
+    default: ""
+  tf-encryption:
+    description: OpenTofu state and plan encryption key (when op-vault is not set).
+    default: ""
+  hostname:
+    description: Dashboard hostname (when op-vault is not set).
+    default: ""
+  allowed-emails:
+    description: Comma-separated Access sign-in emails (when op-vault is not set).
+    default: ""
+  account-id:
+    description: Optional Cloudflare account id override.
+    default: ""
+  access-team-name:
+    description: Optional Zero Trust team name, used only when the account has none.
+    default: ""
+  github-token:
+    description: Token used to post the dry-run report on a pull request (pull-requests write).
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Locate the dashboard code and the data
+      id: where
+      shell: bash
+      env:
+        DATA_DIR: ${{ inputs.data-dir }}
+        REPO_PRIVATE: ${{ github.event.repository.private }}
+      run: |
+        root=$(cd "${{ github.action_path }}/../../.." && pwd)
+        echo "root=$root" >> "$GITHUB_OUTPUT"
+        if [ -n "$DATA_DIR" ]; then
+          # Real records may only be read where the run's log and artifacts are private.
+          if [ "$REPO_PRIVATE" != "true" ]; then
+            echo "::error::data-dir is set but this repository is not private; refusing to read real records here."
+            exit 1
+          fi
+          echo "data=$(cd "$DATA_DIR" && pwd)" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Keep the hostname and emails out of the log
+      if: inputs.cloud == 'true'
+      shell: bash
+      env:
+        HOSTNAME_: ${{ inputs.hostname }}
+        EMAILS: ${{ inputs.allowed-emails }}
+      run: |
+        for v in "$HOSTNAME_" ${EMAILS//,/ }; do
+          [ -n "$v" ] && echo "::add-mask::$v"
+        done
+        exit 0
+
+    # Tools and tasks come from app/mise.toml (versions checksummed in mise.lock), so CI runs exactly what
+    # `mise run <task>` runs on a dev box. See app/DEPLOY.md, "Local development".
+    - uses: jdx/mise-action@90f833d396d0cc3674b631d2d225e306476c303a # v5.2.10
+      with:
+        # renovate: datasource=github-releases depName=jdx/mise extractVersion=^v(?<version>.+)$
+        version: 2026.11.10
+        working_directory: ${{ steps.where.outputs.root }}/app
+        cache: true
+        persist_github_token: false
+
+    - name: Check (tofu fmt, tofu validate, unit tests)
+      if: inputs.checks == 'true'
+      shell: bash
+      working-directory: ${{ steps.where.outputs.root }}/app
+      env:
+        MISE_TRUSTED_CONFIG_PATHS: ${{ steps.where.outputs.root }}/app
+      run: mise run check
+
+    # The static site that Cloudflare serves. Without data-dir it is built from the sample events, so a fork needs no data.
+    - name: Build the site
+      shell: bash
+      working-directory: ${{ steps.where.outputs.root }}
+      env:
+        DATA: ${{ steps.where.outputs.data }}
+      run: |
+        if [ -n "$DATA" ]; then
+          python3 tools/build_report.py --events "$DATA/tracker/events.csv" --csv "$DATA/tracker/job_search_tracker.csv" \
+            --applications "$DATA/documents/applications" --out site
+        else
+          python3 tools/build_report.py --events tracker/examples/events.csv --out site
+        fi
+
+    - name: Note that deploys are not set up
+      if: inputs.cloud != 'true'
+      shell: bash
+      run: |
+        echo "Checks and site build only: deploys are off (repository variable DASHBOARD_DEPLOY is not true), no deploy settings are configured, or this is a fork or Dependabot PR, so nothing was planned. To turn deploys on, see app/DEPLOY.md in the dashboard repository." >> "$GITHUB_STEP_SUMMARY"
+
+    # Preflight 1: names the active settings source and lists every missing name and where to set it. In 1Password
+    # mode it runs inside `op run`, so it checks the values the vault actually returned (op masks them in the log).
+    - name: "Preflight: settings"
+      if: inputs.cloud == 'true'
+      shell: bash
+      working-directory: ${{ steps.where.outputs.root }}/app
+      env:
+        MISE_TRUSTED_CONFIG_PATHS: ${{ steps.where.outputs.root }}/app
+        OP_VAULT: ${{ inputs.op-vault }}
+        OP_SERVICE_ACCOUNT_TOKEN: ${{ inputs.op-vault != '' && inputs.op-service-account-token || '' }}
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        TF_ENCRYPTION: ${{ inputs.tf-encryption }}
+        CLOUDFLARE_HOSTNAME: ${{ inputs.hostname }}
+        CLOUDFLARE_ACCESS_ALLOWED_EMAILS: ${{ inputs.allowed-emails }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account-id }}
+        CLOUDFLARE_ACCESS_TEAM_NAME: ${{ inputs.access-team-name }}
+        COMMENT_FILE: /tmp/dashboard-report.md
+      run: mise run preflight-names
+
+    # Preflight 2: does the token work and have every permission? Names each one it lacks. Read-only.
+    - name: "Preflight: Cloudflare token"
+      if: inputs.cloud == 'true'
+      shell: bash
+      working-directory: ${{ steps.where.outputs.root }}/app
+      env:
+        MISE_TRUSTED_CONFIG_PATHS: ${{ steps.where.outputs.root }}/app
+        OP_VAULT: ${{ inputs.op-vault }}
+        OP_SERVICE_ACCOUNT_TOKEN: ${{ inputs.op-vault != '' && inputs.op-service-account-token || '' }}
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        TF_ENCRYPTION: ${{ inputs.tf-encryption }}
+        CLOUDFLARE_HOSTNAME: ${{ inputs.hostname }}
+        CLOUDFLARE_ACCESS_ALLOWED_EMAILS: ${{ inputs.allowed-emails }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account-id }}
+        CLOUDFLARE_ACCESS_TEAM_NAME: ${{ inputs.access-team-name }}
+        COMMENT_FILE: /tmp/dashboard-report.md
+      run: mise run preflight-token
+
+    # dry-run (PRs): creates nothing, plans against current state. plan: also ensures the empty state bucket.
+    # apply: plans, then applies that same saved plan; refuses a plan that deletes or replaces anything.
+    - name: Plan or apply
+      if: inputs.cloud == 'true'
+      shell: bash
+      working-directory: ${{ steps.where.outputs.root }}/app
+      env:
+        MISE_TRUSTED_CONFIG_PATHS: ${{ steps.where.outputs.root }}/app
+        OP_VAULT: ${{ inputs.op-vault }}
+        OP_SERVICE_ACCOUNT_TOKEN: ${{ inputs.op-vault != '' && inputs.op-service-account-token || '' }}
+        CLOUDFLARE_API_TOKEN: ${{ inputs.cloudflare-api-token }}
+        TF_ENCRYPTION: ${{ inputs.tf-encryption }}
+        CLOUDFLARE_HOSTNAME: ${{ inputs.hostname }}
+        CLOUDFLARE_ACCESS_ALLOWED_EMAILS: ${{ inputs.allowed-emails }}
+        CLOUDFLARE_ACCOUNT_ID: ${{ inputs.account-id }}
+        CLOUDFLARE_ACCESS_TEAM_NAME: ${{ inputs.access-team-name }}
+        COMMENT_FILE: /tmp/dashboard-report.md
+        MODE: ${{ inputs.mode }}
+      run: |
+        case "$MODE" in
+          dry-run) mise run plan ;;
+          plan)    mise run plan-save ;;
+          apply)   mise run apply --confirm-apply ;;
+          *) echo "::error::unknown mode '$MODE'"; exit 1 ;;
+        esac
+
+    # Posts one comment per commit that ran the plan (or what to fix), so each push keeps its own result in the PR
+    # history. A re-run of the same commit updates that commit's comment. Same-repo PRs only; the report has the
+    # hostname and email addresses replaced.
+    - name: Comment on the pull request
+      if: always() && inputs.cloud == 'true' && github.event_name == 'pull_request' && inputs.github-token != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        COMMENT_FILE: /tmp/dashboard-report.md
+        PR: ${{ github.event.pull_request.number }}
+        SHA: ${{ github.event.pull_request.head.sha }}
+      run: |
+        [ -f "$COMMENT_FILE" ] || exit 0
+        marker="<!-- dashboard-deploy-report sha=$SHA -->"
+        body="$marker"$'\n'"Commit \`${SHA:0:7}\`"$'\n'$(tail -n +2 "$COMMENT_FILE" | head -c 60000)
+        id=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments?per_page=100" \
+          --jq "[.[] | select(.body | startswith(\"$marker\"))][0].id // empty")
+        if [ -n "$id" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" >/dev/null
+        else
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" >/dev/null
+        fi
