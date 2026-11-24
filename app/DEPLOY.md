@@ -24,6 +24,27 @@ Safeguards: apply refuses any plan that deletes or replaces a resource, the site
 
 Only if the preflight says so: enable **R2** (Dashboard, R2 Object Storage, free plan) or **Zero Trust** (Dashboard, Zero Trust, Free plan). Both are dashboard-only sign-ups and may ask for a payment method; neither is charged within free limits. Other things that cannot be automated: minting the first token and moving a domain's nameservers to Cloudflare.
 
+## Deploying from a repository that holds the records
+
+The public fork never sees real records. A private repository that has them calls the composite action `.github/actions/dashboard` from a small workflow of its own (path-filtered to the records, plus a manual run), so the logs, the data and the settings stay private while all of the build and deploy logic stays here:
+
+```yaml
+jobs:
+  dashboard:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@<sha> # records, no credentials kept
+        with: { persist-credentials: false }
+      - uses: dbensmith/ai-job-search-dashboard/.github/actions/dashboard@<sha> # master
+        with:
+          data-dir: .
+          cloud: ${{ vars.DASHBOARD_DEPLOY == 'true' }}
+          mode: plan
+          # op-vault / cloudflare-api-token / tf-encryption / hostname / allowed-emails, as in deploy-dashboard.yml
+```
+
+The action reads `tracker/events.csv`, `tracker/job_search_tracker.csv` and `documents/applications/` under `data-dir`, builds `site/` and runs the same preflight, plan and apply as this repo's own workflow. Without `data-dir` it builds the demo from `tracker/examples/events.csv`. It fails if `data-dir` is set and the calling repository is not private.
+
 ## Local development (mise)
 
 CI runs the same `mise` tasks you can run on a dev box, in a container, or in an agent sandbox such as Claude Code, so they cannot drift. Tools are pinned in `app/mise.toml` (Node, OpenTofu, the 1Password CLI; checksums in `mise.lock`; wrangler is pinned by `package-lock.json`).
