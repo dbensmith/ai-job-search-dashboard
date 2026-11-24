@@ -32,12 +32,12 @@ echo "session:teardown done"
 '''
 
 [tasks."test:dashboard"]
-description = "Python unit tests for the dashboard files (PII guard, tracker CSV tools, build_report). Fails when none of them exist"
+description = "Python unit tests for the dashboard files (PII guard, tracker CSV tools, build_report, html_report). Fails when none of them exist"
 depends = ["session:setup"]
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
-mods=$(ls tests/test_pii_guard.py tests/test_tracker*.py tests/test_build_report*.py 2>/dev/null | sed 's#/#.#; s#\.py$##' || true)
+mods=$(ls tests/test_pii_guard.py tests/test_tracker*.py tests/test_build_report*.py tests/test_html_report*.py 2>/dev/null | sed 's#/#.#; s#\.py$##' || true)
 [ -n "$mods" ] || { echo "no dashboard unit tests found" >&2; exit 1; }
 .session/py/bin/python -m unittest -q $mods
 '''

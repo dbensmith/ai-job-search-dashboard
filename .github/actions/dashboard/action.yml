@@ -8,7 +8,7 @@ description: Build the static dashboard from a data checkout, then plan or apply
 
 inputs:
   data-dir:
-    description: "Directory holding the records (tracker/events.csv, tracker/job_search_tracker.csv, documents/applications/). Empty builds the demo site from tracker/examples/events.csv. A non-empty value is refused unless the calling repository is private."
+    description: "Directory holding the records (tracker/events.csv, documents/applications/; job_search_tracker.csv at the root is derived from the log). Empty builds the demo site from tracker/examples/events.csv. A non-empty value is refused unless the calling repository is private."
     default: ""
   mode:
     description: "dry-run (plan, read-only), plan (plan and save, creates the empty state bucket), apply (plan, then apply that plan)."
@@ -106,8 +106,7 @@ runs:
         DATA: ${{ steps.where.outputs.data }}
       run: |
         if [ -n "$DATA" ]; then
-          python3 tools/build_report.py --events "$DATA/tracker/events.csv" --csv "$DATA/tracker/job_search_tracker.csv" \
-            --applications "$DATA/documents/applications" --out site
+          python3 tools/build_report.py --root "$DATA" --out site
         else
           python3 tools/build_report.py --events tracker/examples/events.csv --out site
         fi
