@@ -41,6 +41,8 @@
     "notes",
     "pack",
     "posted_on",
+    "posting_id",
+    "preview_url",
     "priority",
     "referral",
     "region",
