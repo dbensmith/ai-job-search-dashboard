@@ -2,6 +2,7 @@
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
@@ -45,6 +46,28 @@ class Report(unittest.TestCase):
             rc, html = build(events=Path(d, "none.csv"), root=d)
         self.assertEqual(rc, 0)
         self.assertIn("Acme", html)
+
+    def test_outcome_ticks_count_without_symlinks(self):
+        # Windows refuses symlinks without Developer Mode (WinError 1314); the report must not need one.
+        with tempfile.TemporaryDirectory() as d:
+            pack = Path(d, "documents", "applications", "fabrikam_sample_senior_security_architect")
+            pack.mkdir(parents=True)
+            (pack / "outcome.md").write_text(
+                "## Interview stages reached\n- [x] Phone screen\n", encoding="utf-8")
+            seen = {}
+            real = b.report_data.load
+
+            def capture(root):
+                seen["data"] = real(root)
+                return seen["data"]
+
+            with mock.patch.object(Path, "symlink_to", side_effect=OSError(1314, "privilege not held")), \
+                    mock.patch.object(b.report_data, "load", side_effect=capture):
+                rc, _ = build(root=d)
+        self.assertEqual(rc, 0)
+        row = next(r for r in seen["data"]["rows"] if r["company"] == "Fabrikam Sample")
+        self.assertEqual(row["status"], "applied")
+        self.assertGreaterEqual(row["_stage"], 1)  # the ticked phone screen reached the funnel
 
     def test_missing_inputs(self):
         self.assertEqual(b.main(["--root", "/nope", "--events", "/nope.csv", "--out", "/tmp/claude-0/x"]), 2)

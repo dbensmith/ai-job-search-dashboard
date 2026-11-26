@@ -10,6 +10,7 @@ Without an events log, <root>/job_search_tracker.csv is rendered as it is. No LL
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -41,10 +42,14 @@ def main(argv=None) -> int:
         tmp = tempfile.TemporaryDirectory()
         root = Path(tmp.name)
         t.sync_csv(t.fold(rows)[0], root / "job_search_tracker.csv")
+        # report_data reads only each pack folder and its outcome.md, so mirror just those. A symlink to the
+        # real folder needs a privilege Windows withholds by default (WinError 1314).
         apps = args.root / "documents" / "applications"
-        if apps.is_dir():
-            (root / "documents").mkdir()
-            (root / "documents" / "applications").symlink_to(apps.resolve(), target_is_directory=True)
+        for pack in sorted(apps.iterdir()) if apps.is_dir() else []:
+            if pack.is_dir():
+                (root / "documents" / "applications" / pack.name).mkdir(parents=True)
+                if (pack / "outcome.md").is_file():
+                    shutil.copyfile(pack / "outcome.md", root / "documents" / "applications" / pack.name / "outcome.md")
     elif not (root / "job_search_tracker.csv").exists():
         print(f"error: neither {events} nor {root / 'job_search_tracker.csv'} exists", file=sys.stderr)
         return 2
